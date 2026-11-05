@@ -42,7 +42,7 @@ import pyarrow.parquet as pq
 from . import catalog, devices, units
 from .catalog import short_category_value, short_type, short_workout, type_kind
 
-PARSER_VERSION = 3
+PARSER_VERSION = 5
 MISSING_TIME = np.iinfo(np.int64).min
 
 RECORD_SCHEMA = pa.schema([
@@ -336,11 +336,14 @@ class _Importer:
         self.part_no: Counter = Counter()
         self.sources: List[_SourceInfo] = []
         self.source_ids: Dict[Tuple[str, str], int] = {}
+        self._device_cache: Dict[str, Tuple[str, str]] = {}
         self.type_counts: Counter = Counter()
         self.type_units: Dict[str, Counter] = defaultdict(Counter)
         self.type_first: Dict[str, int] = {}
         self.type_last: Dict[str, int] = {}
         self.type_sources: Dict[str, Counter] = defaultdict(Counter)
+        self.source_span: Dict[int, List[int]] = {}
+        self.source_records: Counter = Counter()
         self.workouts: List[dict] = []
         self.activity: List[tuple] = []
         self.corr_rows: Dict[str, list] = defaultdict(list)
@@ -354,11 +357,16 @@ class _Importer:
 
     # -- sources ---------------------------------------------------------
     def source_id(self, name: str, device: Optional[str], version: Optional[str]) -> int:
+        # One source per physical device: the device string also contains the
+        # software version, which would otherwise split a Watch per watchOS update.
         tail = devices.device_tail(device)
-        key = (name, tail)
+        hw = self._device_cache.get(tail)
+        if hw is None:
+            hw = self._device_cache[tail] = devices.parse_device(device)
+        model, hardware = hw
+        key = (name, hardware or model)
         sid = self.source_ids.get(key)
         if sid is None:
-            model, hardware = devices.parse_device(device)
             info = _SourceInfo(name, model, hardware, devices.classify(name, model, hardware))
             sid = len(self.sources)
             self.sources.append(info)
@@ -534,9 +542,22 @@ class _Importer:
         self.type_last[short] = int(max(ends.max(), self.type_last.get(short, ends.max())))
         for u, c in Counter(table.column("unit").to_pylist()).items():
             self.type_units[short][u or ""] += c
-        sids, counts = np.unique(table.column("source_id").to_numpy(), return_counts=True)
+        sid_arr = table.column("source_id").to_numpy()
+        sids, counts = np.unique(sid_arr, return_counts=True)
         for s, c in zip(sids.tolist(), counts.tolist()):
             self.type_sources[short][s] += c
+            self.source_records[s] += c
+        spans = pd.DataFrame({"s": sid_arr, "a": starts, "b": ends}).groupby("s").agg(a=("a", "min"), b=("b", "max"))
+        for s, row in spans.iterrows():
+            self._extend_span(int(s), int(row["a"]), int(row["b"]))
+
+    def _extend_span(self, sid: int, first: int, last: int) -> None:
+        span = self.source_span.get(sid)
+        if span is None:
+            self.source_span[sid] = [first, last]
+        else:
+            span[0] = min(span[0], first)
+            span[1] = max(span[1], last)
 
     def flush(self, t: str) -> None:
         rows = self.buffers.pop(t, None)
@@ -616,6 +637,9 @@ class _Importer:
             rows.append(_workout_row(w, int(start[i]), int(end[i]), int(start_off[i]), int(end_off[i])))
         df = pd.DataFrame(rows)
         df = df[df["start"] != MISSING_TIME]
+        for sid, a, b in zip(df["source_id"], df["start"], df["end"]):
+            self._extend_span(int(sid), int(a), int(b))
+            self.source_records[int(sid)] += 1
         pq.write_table(pa.Table.from_pandas(df, preserve_index=False), self.out / "workouts.parquet")
 
     def _write_activity(self) -> None:
@@ -635,9 +659,12 @@ class _Importer:
                 "kind": s.kind, "friendly": devices.friendly_model(s.model, s.hardware),
                 "priority": devices.KIND_PRIORITY.get(s.kind, 5),
                 "versions": ", ".join(sorted(versions, key=_version_key)[-6:]),
+                "first": self.source_span.get(sid, [None, None])[0],
+                "last": self.source_span.get(sid, [None, None])[1],
+                "records": int(self.source_records.get(sid, 0)),
             })
         df = pd.DataFrame(rows, columns=["source_id", "name", "model", "hardware", "kind", "friendly",
-                                         "priority", "versions"])
+                                         "priority", "versions", "first", "last", "records"])
         pq.write_table(pa.Table.from_pandas(df, preserve_index=False), self.out / "sources.parquet")
 
 

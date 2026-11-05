@@ -166,15 +166,20 @@ def compute_daily(store: HealthStore, nights: pd.DataFrame, naps: pd.DataFrame,
             "workouts_n": g.size().astype(float), "workout_min": g["duration_min"].sum(),
             "workout_kcal": g["energy_kcal"].sum(min_count=1),
         }), how="outer")
-        for c in ("workouts_n", "workout_min"):
-            if c in daily:
-                # days with watch data but no workout -> 0 workouts (not missing)
-                has_watch = daily.get("watch_wear_h", pd.Series(index=daily.index, dtype=float)).fillna(0) > 0
-                daily.loc[has_watch & daily[c].isna(), c] = 0.0
 
     # full calendar, trimmed of the partial export day
     full = pd.date_range(daily.index.min(), daily.index.max(), freq="D")
     daily = daily.reindex(full)
+    # On days the Watch was worn, "no samples" for these means zero, not missing.
+    if "watch_wear_h" in daily:
+        worn = daily["watch_wear_h"].fillna(0) >= 1
+        zero_when_worn = ["exercise_min", "stand_min", "stand_hours", "mindful_min", "daylight_min",
+                          "workouts_n", "workout_min"] + list(EVENT_TYPES)
+        for c in zero_when_worn:
+            if c in daily:
+                daily.loc[worn & daily[c].isna(), c] = 0.0
+            elif c in ("exercise_min", "stand_hours") or c in EVENT_TYPES:
+                daily[c] = np.where(worn, 0.0, np.nan)
     export_day = _export_day(store)
     if export_day is not None and daily.index.max() >= export_day:
         daily = daily[daily.index < export_day]

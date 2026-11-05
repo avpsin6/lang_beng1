@@ -21,7 +21,7 @@ from .daily import compute_daily
 from .sleep import build_nights
 from .workouts import clean_workouts
 
-METRICS_VERSION = 4
+METRICS_VERSION = 5
 
 
 @dataclass
