@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "healthlens"
+version = "0.1.0"
+description = "Private, offline analysis of your Apple Health / Apple Watch export: activity, heart, sleep and long-term trends."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "Akshaj Singh" }]
+dependencies = [
+    "numpy>=1.22",
+    "pandas>=2.0",
+    "pyarrow>=12",
+    "plotly>=5.15",       # only used to supply the offline plotly.js bundle
+    "jinja2>=3.0",
+    "tzdata; platform_system == 'Windows'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+healthlens = "healthlens.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+healthlens = ["templates/*.j2", "static/*.js", "static/*.css"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

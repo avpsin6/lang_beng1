@@ -1,0 +1,62 @@
+# ---------------------------------------------------------------------------
+# PRIVACY GUARD — this repository is PUBLIC.
+# Your Apple Health export, the parsed cache and every generated report contain
+# personal health information. None of it may ever be committed. The patterns
+# below block the usual file names; HealthLens also writes everything to
+# ~/HealthLens (outside this repo) by default.
+# ---------------------------------------------------------------------------
+
+# Raw Apple Health exports (any language: the zip / xml names are localised)
+*.zip
+*.xml
+*.gpx
+*.fit
+apple_health_export/
+apple_health_export*/
+export/
+electrocardiograms/
+workout-routes/
+clinical-records/
+
+# HealthLens working data, caches and generated output
+HealthLens/
+healthlens-data/
+healthlens_home/
+data/
+cache/
+output/
+reports/
+*.parquet
+*.feather
+*.sqlite
+*.sqlite3
+*.db
+*.csv
+*.html
+!src/healthlens/**/templates/*.html
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.env
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Notebooks may embed real data in their outputs
+*.ipynb
+.ipynb_checkpoints/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
