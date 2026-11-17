@@ -98,13 +98,16 @@ def gen_coverage(ctx: Context) -> List[Insight]:
     wear = d.loc[ctx.worn, "watch_wear_h"].mean() if "watch_wear_h" in d and worn_days else float("nan")
     src = ctx.m.sources
     devices = src[src["kind"].isin(["watch", "phone"])].copy()
-    names = []
+    spans = {}
     for _, r in devices.sort_values("first").iterrows():
         if pd.isna(r.get("first")) or int(r.get("records", 0) or 0) < 50:
             continue
         a = pd.Timestamp(int(r["first"]), unit="s").year
         b = pd.Timestamp(int(r["last"]), unit="s").year
-        names.append(f"{r['friendly'] or r['name']} ({a}–{b})" if a != b else f"{r['friendly'] or r['name']} ({a})")
+        label = r['friendly'] or r['name']
+        spans.setdefault(label, [a, b])
+        spans[label] = [min(spans[label][0], a), max(spans[label][1], b)]
+    names = [f"{k} ({a}–{b})" if a != b else f"{k} ({a})" for k, (a, b) in spans.items()]
     nights = int(d["sleep_any_h"].notna().sum()) if "sleep_any_h" in d else 0
     measured = int(d["sleep_h"].notna().sum()) if "sleep_h" in d else 0
     detail = (f"Your export covers {fmt.date(ctx.first_day)} to {fmt.date(ctx.last_day)} ({years:.1f} years). "

@@ -67,13 +67,13 @@ def converter(unit: Optional[str], canonical: str) -> Optional[Callable[[np.ndar
     Returns None when no sensible conversion exists (caller keeps raw values).
     """
     unit = (unit or "").strip()
-    if unit == canonical or unit in _ALIASES.get(canonical, ()):
-        return lambda v: v
     if canonical == "%":
         # HealthKit percentages are fractions (0.97 == 97 %).
         if unit == "%":
             return lambda v: v * 100.0
         return None
+    if unit == canonical or unit in _ALIASES.get(canonical, ()):
+        return lambda v: v
     if canonical == "degC":
         if unit in ("degC", "degF", "K"):
             return lambda v: _temp_to_c(v, unit)

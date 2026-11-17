@@ -46,6 +46,8 @@ class Formatter:
         v = self.units.convert(float(x), m.unit)
         label = self.units.label(m.unit)
         text = self.num(v, dec)
+        if with_unit and label == "%":
+            return f"{text}%"
         return f"{text} {label}".strip() if with_unit and label else text
 
     def delta(self, key: str, d: Optional[float], decimals: Optional[int] = None) -> str:

@@ -1,0 +1,362 @@
+{% if not fragment %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="{{ csp }}">
+<meta name="referrer" content="no-referrer">
+{% endif %}
+<title>{{ title }}</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+{{ css|safe }}
+figure { margin: 0; }
+.card.span { grid-column: 1 / -1; }
+.charts.small { grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); }
+.plot-sm { min-height: 200px; }
+.callout { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px;
+  display: grid; gap: 6px; max-width: 80ch; }
+.callout p { color: var(--ink-2); }
+.stage-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: var(--step--1); color: var(--ink-2); }
+.stage-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+:root { --ord-0: #86b6ef; --ord-1: #5598e7; --ord-2: #2a78d6; --ord-3: #1c5cab; --ord-4: #104281;
+  --ord-0-text: #0b0b0b; --ord-1-text: #ffffff; --ord-2-text: #ffffff; --ord-3-text: #ffffff; --ord-4-text: #ffffff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --ord-0: #184f95; --ord-1: #256abf; --ord-2: #3987e5; --ord-3: #6da7ec; --ord-4: #9ec5f4;
+  --ord-0-text: #ffffff; --ord-1-text: #ffffff; --ord-2-text: #ffffff; --ord-3-text: #0b0b0b; --ord-4-text: #0b0b0b; } }
+:root[data-theme="dark"] { --ord-0: #184f95; --ord-1: #256abf; --ord-2: #3987e5; --ord-3: #6da7ec; --ord-4: #9ec5f4;
+  --ord-0-text: #ffffff; --ord-1-text: #ffffff; --ord-2-text: #ffffff; --ord-3-text: #0b0b0b; --ord-4-text: #0b0b0b; }
+{% for n in range(5) %}.ord-{{ n }} { background: var(--ord-{{ n }}); color: var(--ord-{{ n }}-text); }
+{% endfor %}
+details.more > summary { cursor: pointer; color: var(--accent); font-size: var(--step--1); }
+details.more[open] > summary { margin-bottom: 8px; }
+.method { display: grid; gap: 10px; max-width: 76ch; color: var(--ink-2); padding-left: 1.1em; margin: 0; }
+.method li::marker { color: var(--muted); }
+.answer-clear { color: var(--ink); }
+.answer-none { color: var(--muted); }
+.subhead { font-size: var(--step-2); font-weight: 700; }
+</style>
+{% if not fragment %}</head>
+<body>
+{% endif %}
+{% macro findings(items, cls="", show_domain=False) %}
+<div class="findings {{ cls }}">
+{% for i in items %}
+  <article class="finding">
+    {% if i.tone in ("positive", "attention") or show_domain %}
+    <div class="meta">
+      {% if i.tone == "positive" %}<span class="pill good"><span class="icon" aria-hidden="true">✓</span>Going well</span>{% endif %}
+      {% if i.tone == "attention" %}<span class="pill attention"><span class="icon" aria-hidden="true">!</span>Worth a look</span>{% endif %}
+      {% if show_domain %}<span class="pill domain">{{ i.domain_label }}</span>{% endif %}
+    </div>
+    {% endif %}
+    <h3>{{ i.title }}</h3>
+    <p>{{ i.detail }}</p>
+    {% if i.caveat %}<p class="caveat">{{ i.caveat }}</p>{% endif %}
+  </article>
+{% endfor %}
+</div>
+{% endmacro %}
+{% macro chart(id, title, subtitle="", note="", span=False, small=False) %}
+{% if charts.get(id) or small %}
+<figure class="card{% if span %} span{% endif %}">
+  <div class="card-head">
+    <div><h3>{{ title }}</h3>{% if subtitle %}<p>{{ subtitle }}</p>{% endif %}</div>
+    <button class="text" type="button" data-table-for="{{ id }}" aria-expanded="false" aria-controls="table-{{ id }}">Show table</button>
+  </div>
+  <div class="plot{% if small %} plot-sm{% endif %}" data-chart="{{ id }}" aria-busy="true" role="img" aria-label="{{ title }}"></div>
+  {% if note %}<p class="note">{{ note }}</p>{% endif %}
+  <div id="table-{{ id }}" hidden></div>
+</figure>
+{% endif %}
+{% endmacro %}
+
+<header class="masthead">
+  <div class="wrap">
+    <p class="eyebrow">HealthLens · Apple Health report</p>
+    <h1>Your health, {{ years_label }}</h1>
+    <p class="lede">{{ period }}{% if coverage %} · {{ coverage.title }}{% endif %}{% if devices_text %} · {{ devices_text }}{% endif %}</p>
+    <div class="masthead-row">
+      <span class="chip"><span class="dot" aria-hidden="true"></span>Made on your computer · no data leaves this file</span>
+      <span class="chip">Generated {{ generated }} · {{ units }} units</span>
+      <button class="text" id="theme-toggle" type="button">Theme: system</button>
+    </div>
+    {% if demo %}
+    <p class="demo-banner"><strong>Demo report.</strong> Every number here comes from a synthetic person that HealthLens generated to show what the report looks like. It is not anyone's real health data.</p>
+    {% endif %}
+  </div>
+</header>
+
+<nav class="toc" aria-label="Report sections">
+  <div class="wrap">
+    <a href="#summary">Summary</a>
+    <a href="#activity">Activity</a>
+    <a href="#heart">Heart &amp; fitness</a>
+    <a href="#sleep">Sleep</a>
+    <a href="#workouts">Workouts</a>
+    <a href="#years">Over the years</a>
+    <a href="#connections">Connections</a>
+    <a href="#data">Data &amp; methods</a>
+  </div>
+</nav>
+
+<main class="wrap">
+  <section id="summary" aria-labelledby="h-summary">
+    <div class="section-head">
+      <h2 id="h-summary">Summary</h2>
+      <p>The tiles compare your last 12 months with the 12 months before. Below them are the findings that stand out across all of your data.</p>
+    </div>
+    {% if tiles %}
+    <div class="tiles">
+      {% for t in tiles %}
+      <div class="tile">
+        <span class="label">{{ t.label }}</span>
+        <span class="value">{{ t.number }}{% if t.unit %}<span class="unit">{{ t.unit }}</span>{% endif %}</span>
+        <span class="delta {{ t.cls }}">{{ t.delta }}</span>
+        {% if t.spark %}
+        <svg viewBox="0 0 200 32" preserveAspectRatio="none" aria-hidden="true">
+          {% if t.spark.context %}<polyline class="spark-context" points="{{ t.spark.context }}" fill="none" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>{% endif %}
+          <polyline class="spark-current" points="{{ t.spark.current }}" fill="none" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>
+        </svg>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <p class="small muted">Sparklines show the last 24 months; the highlighted part is the most recent 12.</p>
+    {% endif %}
+    <h3 class="subhead">What stands out</h3>
+    {{ findings(key, "key", show_domain=True) }}
+    <p class="small muted">“Going well” and “Worth a look” compare you with your own history and with widely used guidelines. They are not medical judgements.</p>
+  </section>
+
+  <section id="activity" aria-labelledby="h-activity">
+    <div class="section-head">
+      <h2 id="h-activity">Activity</h2>
+      <p>Steps, exercise and the Activity rings. Steps that your iPhone and Watch both counted are merged so nothing is counted twice.</p>
+    </div>
+    {{ findings(sections.activity) }}
+    <div class="charts">
+      {{ chart("steps_daily", "Steps per day", "30-day average, with the middle half of days shaded", span=True) }}
+      {{ chart("steps_by_year", "Average steps per day, by year") }}
+      {{ chart("exercise_weekly", "Exercise minutes per week", "Last two years, weeks you wore the Watch on 5+ days") }}
+      {{ chart("rings_monthly", "Activity rings closed", "Share of worn days each month") }}
+      {{ chart("activity_heatmap", "When you move", "Average steps by hour and day of week, last two years") }}
+    </div>
+  </section>
+
+  <section id="heart" aria-labelledby="h-heart">
+    <div class="section-head">
+      <h2 id="h-heart">Heart &amp; fitness</h2>
+      <p>Resting heart rate, heart-rate variability and cardio fitness change slowly with fitness and age, and quickly with sleep, stress and illness. Your own baseline is the best reference.</p>
+    </div>
+    {{ findings(sections.heart + sections.body) }}
+    <div class="charts">
+      {{ chart("rhr_daily", "Resting heart rate", "30-day median, middle half of days shaded", note=("Red bands mark periods when your resting heart rate ran well above your recent baseline." if period_rows else ""), span=True) }}
+      {{ chart("hrv_daily", "Heart-rate variability (SDNN)", "30-day median, middle half of days shaded") }}
+      {{ chart("vo2", "Cardio fitness (VO₂ max)", "Watch estimates from outdoor walks, runs and hikes (mL/kg/min)") }}
+      {{ chart("walking_hr", "Walking heart rate", "60-day median") }}
+      {{ chart("hr_by_hour", "Heart rate through the day", "Average while wearing the Watch, last two years") }}
+      {% if period_rows %}
+      <figure class="card span">
+        <div class="card-head"><div><h3>Periods of raised resting heart rate</h3><p>Compared with the 30 days before each period</p></div></div>
+        <div class="table-scroll">
+          <table class="data">
+            <thead><tr><th scope="col">When</th><th scope="col">Days</th><th scope="col">Peak</th><th scope="col">Usual</th><th scope="col">HRV</th><th scope="col">Steps</th><th scope="col">Sleep / in bed</th></tr></thead>
+            <tbody>
+            {% for r in period_rows %}<tr><th scope="row">{{ r[0] }}</th>{% for c in r[1:] %}<td>{{ c }}</td>{% endfor %}</tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="note">These often line up with a cold or flu, hard training, travel, heat, alcohol or stress. They are patterns in your data, not a diagnosis.</p>
+      </figure>
+      {% endif %}
+    </div>
+  </section>
+
+  <section id="sleep" aria-labelledby="h-sleep">
+    <div class="section-head">
+      <h2 id="h-sleep">Sleep</h2>
+      <p>Measured sleep (Watch or a sleep app) and time in bed (iPhone Bedtime / Sleep Schedule) are different measurements, so they are kept apart. Nights are dated by the morning you woke up.</p>
+    </div>
+    {% if sleep_cov %}
+    <div class="callout"><h3>{{ sleep_cov.title }}</h3><p>{{ sleep_cov.detail }}</p></div>
+    {% endif %}
+    {{ findings(sections.sleep | rejectattr("title", "equalto", sleep_cov.title if sleep_cov else "") | list) }}
+    <div class="charts">
+      {{ chart("sleep_nights", "Sleep and time in bed per night", "Each dot is one night", span=True) }}
+      {{ chart("sleep_window_monthly", "When you sleep", "Median bedtime to wake-up, by month") }}
+      {{ chart("sleep_weekday", "Your weekly sleep rhythm", "Median bedtime to wake-up for each night of the week") }}
+      {% if charts.get("sleep_stages") %}
+      <figure class="card">
+        <div class="card-head">
+          <div><h3>Sleep stages</h3><p>Average split on nights with stage data, then the most recent nights</p></div>
+          <button class="text" type="button" data-table-for="sleep_stages" aria-expanded="false" aria-controls="table-sleep_stages">Show table</button>
+        </div>
+        {% if stage_split %}
+        <div class="segbar" role="img" aria-label="Average sleep stage split: {% for s in stage_split %}{{ s.name }} {{ '%.0f'|format(s.share) }}%{% if not loop.last %}, {% endif %}{% endfor %}">
+          {% for s in stage_split %}<span class="ord-{{ s.ord }}" style="flex: {{ '%.2f'|format(s.share) }} 1 0" title="{{ s.name }}: {{ '%.0f'|format(s.share) }}% ({{ s.hours }})">{{ s.label }}</span>{% endfor %}
+        </div>
+        <div class="stage-legend">{% for s in stage_split %}<span><span class="sw ord-{{ s.ord }}"></span>{{ s.name }} · {{ s.hours }}</span>{% endfor %}</div>
+        {% endif %}
+        <div class="plot" data-chart="sleep_stages" aria-busy="true" role="img" aria-label="Sleep stages per night"></div>
+        <p class="note">Wrist-based staging is an estimate, less precise than a sleep lab.</p>
+        <div id="table-sleep_stages" hidden></div>
+      </figure>
+      {% endif %}
+      {{ chart("sleep_coverage", "Nights with sleep data", "By year and source") }}
+    </div>
+  </section>
+
+  <section id="workouts" aria-labelledby="h-workouts">
+    <div class="section-head">
+      <h2 id="h-workouts">Workouts</h2>
+      <p>Sessions recorded with the Workout app or other apps.{% if dupes %} {{ dupes }} duplicate copies of the same session (for example a Watch run also synced from another app) were ignored.{% endif %}</p>
+    </div>
+    {{ findings(sections.workouts) }}
+    <div class="charts">
+      {{ chart("workouts_monthly", "Workout time per month", "Hours, by type", span=True) }}
+      {{ chart("running_pace", "Running pace", "Runs of 2 km or more") }}
+      {{ chart("hr_zones", "Time in heart-rate zones", "Share of workout time, zones from an age-based maximum heart rate (208 − 0.7 × age)") }}
+      {% if workout_rows %}
+      <figure class="card span">
+        <div class="card-head"><div><h3>Workout types</h3><p>All recorded sessions</p></div></div>
+        <div class="table-scroll">
+          <table class="data">
+            <thead><tr><th scope="col">Type</th><th scope="col">Sessions</th><th scope="col">Hours</th><th scope="col">Typical length</th><th scope="col">Distance</th><th scope="col">Avg HR</th><th scope="col">Last</th></tr></thead>
+            <tbody>
+            {% for r in workout_rows %}<tr><th scope="row">{{ r[0] }}</th>{% for c in r[1:] %}<td>{{ c }}</td>{% endfor %}</tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </figure>
+      {% endif %}
+    </div>
+  </section>
+
+  <section id="years" aria-labelledby="h-years">
+    <div class="section-head">
+      <h2 id="h-years">Over the years</h2>
+      <p>How each measure changed from year to year, the longer “chapters” in your activity, and seasonal patterns.</p>
+    </div>
+    {{ findings(sections.trends) }}
+    {% if yearly_rows %}
+    <figure class="card">
+      <div class="card-head"><div><h3>Year in review</h3><p>Per-day averages unless noted; bold marks your best year where higher or lower is clearly better</p></div></div>
+      <div class="table-scroll">
+        <table class="data">
+          <thead><tr><th scope="col">Measure</th>{% for y in yearly_cols %}<th scope="col">{{ y }}</th>{% endfor %}</tr></thead>
+          <tbody>
+          {% for r in yearly_rows %}<tr><th scope="row">{{ r.label }}</th>{% for c in r.cells %}<td{% if c.best %} class="best"{% endif %}>{{ c.text }}</td>{% endfor %}</tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </figure>
+    {% endif %}
+    {% if small %}
+    <div class="charts small">
+      {% for s in small %}{{ chart(s.id, s.title, "Monthly" + (" · " + s.unit if s.unit else ""), small=True) }}{% endfor %}
+    </div>
+    <p class="small muted">Thin vertical lines mark where your typical level shifted (detected change points).</p>
+    {% endif %}
+    <div class="charts">
+      {{ chart("seasonality", "Seasons", "Steps in each month compared with that year's average") }}
+    </div>
+    {% if records %}
+    <figure class="card">
+      <div class="card-head"><div><h3>Personal records</h3><p>Across the whole export</p></div></div>
+      <div class="records">
+        {% for r in records %}
+        <div class="record"><span class="l">{{ r.label }}</span><span class="v">{{ r.value }}</span><span class="l">{{ r.when }}{% if r.detail %} · {{ r.detail }}{% endif %}</span></div>
+        {% endfor %}
+      </div>
+    </figure>
+    {% endif %}
+  </section>
+
+  <section id="connections" aria-labelledby="h-connections">
+    <div class="section-head">
+      <h2 id="h-connections">Connections</h2>
+      <p>Do some of your measures move together? HealthLens checks a fixed list of plausible pairs, removes slow drifts such as seasons first, and only reports links that survive a correction for testing many pairs. These are associations in your data, not proof that one thing causes another.</p>
+    </div>
+    {{ findings(sections.relationships) }}
+    {% if relationship_rows %}
+    <figure class="card">
+      <div class="card-head"><div><h3>Everything that was checked</h3><p>ρ is the rank correlation (−1 to +1) after removing slow drifts</p></div></div>
+      <div class="table-scroll">
+        <table class="data">
+          <thead><tr><th scope="col" class="wrap-text">Question</th><th scope="col" class="wrap-text">What your data shows</th><th scope="col">ρ</th><th scope="col">Based on</th></tr></thead>
+          <tbody>
+          {% for r in relationship_rows %}<tr><th scope="row" class="wrap-text">{{ r.question }}</th><td class="wrap-text {{ 'answer-clear' if r.clear else 'answer-none' }}">{{ r.answer }}</td><td>{{ r.rho }}</td><td>{{ r.n }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </figure>
+    {% endif %}
+  </section>
+
+  <section id="data" aria-labelledby="h-data">
+    <div class="section-head">
+      <h2 id="h-data">Data &amp; methods</h2>
+      {% if coverage %}<p>{{ coverage.detail }}</p>{% endif %}
+    </div>
+    <div class="charts">
+      {{ chart("devices", "Where your data came from", "Devices and apps with 50+ records", span=True) }}
+      {{ chart("availability", "Data coverage", "Share of days with data, by year") }}
+    </div>
+    {% if dedup_text %}<p class="secondary" style="max-width: 76ch">{{ dedup_text }}</p>{% endif %}
+    <figure class="card">
+      <div class="card-head"><div><h3>How the numbers are made</h3></div></div>
+      <ul class="method">
+        <li><strong>Days</strong> are local calendar days. Samples crossing midnight are split, and the partial day of the export itself is left out.</li>
+        <li><strong>Steps, distance and energy</strong> are merged across devices the way the Health app does it: the Watch has priority, then the iPhone, then other apps, and a lower-priority device only counts time the higher one didn't cover.</li>
+        <li><strong>Missing is not zero.</strong> Days without data are left blank; exercise minutes count as zero only on days you wore the Watch.</li>
+        <li><strong>Sleep</strong> uses one source per night for “asleep” (Watch first) and one for “in bed” (iPhone first), never adding sources together. Nights are dated by the morning.</li>
+        <li><strong>Trends</strong> use the median of all pairwise slopes of monthly values (Theil–Sen) and a Mann–Kendall test adjusted for month-to-month correlation; only clear trends are described as rises or falls.</li>
+        <li><strong>Connections</strong> use rank correlations on day-to-day changes after removing slow drifts, effective sample sizes for autocorrelated data, a 5% false-discovery-rate correction and block-bootstrap intervals.</li>
+        <li><strong>Raised resting heart rate</strong> means at least 3 bpm and two robust standard deviations above the 60-day baseline ending a week earlier, for 3+ days (or 2+ days and 5+ bpm).</li>
+        <li><strong>References:</strong> WHO physical activity guidelines (2020); AASM / Sleep Research Society adult sleep recommendation (2015); Paluch et al., Lancet Public Health (2022) on daily steps; Kaminsky et al., Mayo Clinic Proceedings (2015), FRIEND registry VO₂ max norms; Tanaka et al., JACC (2001) for maximum heart rate.</li>
+      </ul>
+    </figure>
+    {% if types_rows %}
+    <details class="more">
+      <summary>All {{ types_rows|length }} data types in your export</summary>
+      <div class="table-scroll">
+        <table class="data">
+          <thead><tr><th scope="col">Type</th><th scope="col">Records</th><th scope="col">First</th><th scope="col">Last</th><th scope="col" class="wrap-text">Main sources</th></tr></thead>
+          <tbody>
+          {% for r in types_rows %}<tr><th scope="row">{{ r[0] }}</th><td>{{ r[1] }}</td><td>{{ r[2] }}</td><td>{{ r[3] }}</td><td class="wrap-text">{{ r[4] }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+    {% endif %}
+    {% if errors %}
+    <details class="more">
+      <summary>{{ errors|length }} part{{ "s" if errors|length > 1 else "" }} of the analysis could not run</summary>
+      <pre style="white-space: pre-wrap; font-size: var(--step--1); color: var(--muted)">{% for e in errors %}{{ e }}
+{% endfor %}</pre>
+    </details>
+    {% endif %}
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p><strong>Not medical advice.</strong> HealthLens describes patterns in your Apple Health data; it is not a medical device and cannot diagnose anything. Talk to a doctor about any health concern, especially new or worsening symptoms.</p>
+    <p><strong>Private by design.</strong> This file was generated on your computer from your export and makes no network requests. It contains your health data, so share it only with people you trust.</p>
+    <p>HealthLens {{ version }}{% if meta.export_date %} · export from {{ meta.export_date[:10] }}{% endif %}{% if meta.n_records %} · {{ "{:,}".format(meta.n_records) }} records{% endif %}</p>
+  </div>
+</footer>
+
+<script type="application/json" id="hl-charts">{{ charts_json|safe }}</script>
+<script>{{ plotly_js|safe }}</script>
+<script>{{ theme_js|safe }}</script>
+{% if not fragment %}
+</body>
+</html>
+{% endif %}
