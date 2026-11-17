@@ -385,14 +385,14 @@ class Charts:
         st = n[n["kind"] == "stages"].sort_values("wake_date").tail(45)
         if len(st) < 5:
             return None
-        x = _dates(st["wake_date"])
+        x = [self.fmt.date(d) for d in st["wake_date"]]     # one slot per tracked night, gaps removed
         data = []
         for col, name, color in self.STAGES:
             data.append({"type": "bar", "x": x, "y": _list(st[col], 3), "name": name,
                          "marker": {"color": color, "line": {"color": "@surface", "width": 1}},
                          "hovertemplate": f"{name}: %{{y:.2f}} h<extra></extra>"})
         layout = {"showlegend": True, "barmode": "stack", "bargap": 0.2, "hovermode": "x unified",
-                  "xaxis": {"type": "date", "hoverformat": "%-d %b %Y"}, "yaxis": {"ticksuffix": " h"},
+                  "xaxis": {"type": "category", "nticks": 6, "tickangle": 0}, "yaxis": {"ticksuffix": " h"},
                   "legend": {"traceorder": "normal"}}
         table = {"columns": ["Morning of", "Deep", "Core", "REM", "Awake"],
                  "rows": [[self.fmt.date(r["wake_date"])] + [self.fmt.hours(r[c]) for c, _, _ in self.STAGES]
