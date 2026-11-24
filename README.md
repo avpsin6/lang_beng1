@@ -33,6 +33,22 @@ You do not need to unzip it.
 
 ## 2. Install (once)
 
+### Windows
+
+1. Open https://github.com/avpsin6/lang_beng1, click the green **Code** button,
+   choose **Download ZIP**, and unzip it (for example into your Documents folder).
+2. Open the unzipped folder and double-click **install.bat**.
+   * If Python isn't installed, it offers to install it for you (with Windows'
+     own `winget` tool) and asks before doing so.
+   * Windows may show a SmartScreen warning because the script isn't signed:
+     click **More info**, then **Run anyway**.
+3. Wait for "HealthLens is installed".
+
+In that folder, click the address bar, type `cmd` and press Enter to open a
+command window. Then use `healthlens` as shown below.
+
+### Mac or Linux
+
 You need Python 3.9 or newer.
 
 ```bash
@@ -55,8 +71,6 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-On Windows, activate with `.venv\Scripts\activate` instead.
-
 ## 3. Use
 
 Try it first on a synthetic person (no real data needed):
@@ -70,6 +84,8 @@ Then run it on your own export:
 ```bash
 healthlens run ~/Downloads/export.zip
 ```
+
+On Windows the export path looks like `C:\Users\you\Downloads\export.zip`.
 
 This reads the export, writes `~/HealthLens/reports/report.html` and
 `dashboard.html`, and opens the report. A large export (several GB unzipped)
